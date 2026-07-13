@@ -29,7 +29,14 @@ This project uses data on new buildings and the resident registry from Statistic
 
 2025: https://www.e-stat.go.jp/stat-search/files?page=1&layout=datalist&toukei=00200241&bunya_l=02&tstat=000001039591&cycle=7&year=20250&month=0&tclass1=000001039601&stat_infid=000040306653&result_back=1&cycle_facet=tclass1%3Acycle&tclass2val=0&metadata=1&data=1
 
+
 ## Process
+
+"scripts/process_data.py"
+
+Statistics Japan officially distributes data in XLS and XLSX formats and does not provide a universal format, so a script must be written to process the data. Python was used instead of R to facilitate processing of the XLS format.
+
+In addition, the data contains certain issues related to Japan's administrative divisions, which also need to be addressed in the script.
 
 ## Implementation
 
