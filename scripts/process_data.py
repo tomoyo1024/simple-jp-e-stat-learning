@@ -3,6 +3,12 @@ import re
 
 import pandas as pd
 
+def _clean_header(s):
+    s = str(s)
+    s = re.sub(r"[\r\n]+", "", s)
+    s = s.strip()
+    # Replace full-width space
+    return re.sub(r"[\s\u3000]+", "_", s)
 
 def clean_estat_building_starts(file_path, year):
     df_raw = pd.read_excel(file_path, header=None, engine="xlrd")
@@ -18,10 +24,23 @@ def clean_estat_building_starts(file_path, year):
     row_category = df_raw.iloc[4].ffill()
     # Real metrics row
     row_metric = df_raw.iloc[5]
+
+    new_columns = ["city_combined"]
+    for i in range(1, len(df_raw.columns)):
+        cat_name = _clean_header(row_category.iloc[i])
+        metric_name = _clean_header(row_metric.iloc[i])
+        new_columns.append(f"{cat_name}_{metric_name}")
     # Data rows
-    df_data = df_raw.iloc[7:].copy()
+    df_data = df_raw.iloc[7:].copy()   
+    df_data.columns = new_columns
+
+    for col in new_columns[1:]:
+        df_data[col] = df_data[col].astype(str).str.strip().replace("-", "0")
+        df_data[col] = pd.to_numeric(df_data[col], errors="coerce").fillna(0)
+
     # Add year column
     df_data.insert(0, "year", year)
+    df_data = df_data.reset_index(drop=True)
     return df_data
 
 
