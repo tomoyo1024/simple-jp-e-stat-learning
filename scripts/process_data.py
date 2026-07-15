@@ -34,6 +34,14 @@ def clean_estat_building_starts(file_path, year):
     df_data = df_raw.iloc[7:].copy()   
     df_data.columns = new_columns
 
+    # Spliting
+    combined = df_data["city_combined"].astype(str).str.strip()
+    extracted = combined.str.extract(r"^(\d{5,6})(.*)$")
+    df_data.insert(0, "city_code", extracted[0].values)
+    df_data.insert(1, "city_name", extracted[1].values)
+    df_data = df_data.drop(columns=["city_combined"])
+    df_data = df_data[df_data["city_code"].notna()]
+
     for col in new_columns[1:]:
         df_data[col] = df_data[col].astype(str).str.strip().replace("-", "0")
         df_data[col] = pd.to_numeric(df_data[col], errors="coerce").fillna(0)
