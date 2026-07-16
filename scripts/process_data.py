@@ -10,6 +10,10 @@ def _clean_header(s):
     # Replace full-width space
     return re.sub(r"[\s\u3000]+", "_", s)
 
+def _to_numeric_loose(series):
+    cleaned = series.astype(str).str.strip().replace({"-": None, "***": None})
+    return pd.to_numeric(cleaned, errors="coerce")
+
 def clean_estat_building_starts(file_path, year):
     df_raw = pd.read_excel(file_path, header=None, engine="xlrd")
 
@@ -57,9 +61,26 @@ def clean_estat_population(file_path, year):
 
     # Data rows
     df_data = df_raw.iloc[6:].copy()
+
+    code6 = df_data[0].astype(str).str.strip()
+    df_data["city_code"] = code6.str[:5]
+    df_data["city_name"] = df_data[2].astype(str).str.strip()
+    df_data = df_data[code6.str.match(r"^\d{6}$")]
+
+    out = pd.DataFrame({
+        "city_code": df_data["city_code"].values,
+        "city_name": df_data["city_name"].values,
+        "population": _to_numeric_loose(df_data[5]).values,
+        "households": _to_numeric_loose(df_data[6]).values,
+        "change": _to_numeric_loose(df_data[19]).values,
+        "growth_rate": _to_numeric_loose(df_data[20]).values,
+        "natural_change": _to_numeric_loose(df_data[21]).values,
+        "social_change": _to_numeric_loose(df_data[23]).values,
+    })
+    out = out.reset_index(drop=True)
     # Add year column
-    df_data.insert(0, "year", year)
-    return df_data
+    out.insert(0, "year", year)
+    return out
 
 if __name__ == "__main__":
     building_files = {
