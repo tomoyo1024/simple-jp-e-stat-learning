@@ -14,6 +14,36 @@ def _to_numeric_loose(series):
     cleaned = series.astype(str).str.strip().replace({"-": None, "***": None})
     return pd.to_numeric(cleaned, errors="coerce")
 
+## Remove non-leaf rows, it means the rows contain sum of leafs
+def to_leaf_level(df):
+    SEIREI_CODES = {
+      "01100",  # 札幌市
+      "04100",  # 仙台市
+      "11100",  # さいたま市
+      "12100",  # 千葉市
+      "14100",  # 横浜市
+      "14130",  # 川崎市
+      "14150",  # 相模原市
+      "15100",  # 新潟市
+      "22100",  # 静岡市
+      "22130",  # 浜松市
+      "23100",  # 名古屋市
+      "26100",  # 京都市
+      "27100",  # 大阪市
+      "27140",  # 堺市
+      "28100",  # 神戸市
+      "33100",  # 岡山市
+      "34100",  # 広島市
+      "40100",  # 北九州市
+      "40130",  # 福岡市
+      "43100",  # 熊本市
+    }
+    _AGGREGATE_SUFFIXES = ("郡", "振興局", "支庁")
+    is_seirei_total = df["city_code"].isin(SEIREI_CODES)
+    is_aggregate_name = df["city_name"].str.endswith(_AGGREGATE_SUFFIXES, na=False)
+    keep_mask = ~(is_seirei_total | is_aggregate_name)
+    return df[keep_mask].reset_index(drop=True)
+
 def clean_estat_building_starts(file_path, year):
     df_raw = pd.read_excel(file_path, header=None, engine="xlrd")
 
@@ -98,16 +128,23 @@ if __name__ == "__main__":
         2025: "data/raw/basic-resident-register/2025.xlsx",
     }
 
+    building_list = []
     for year, file_name in building_files.items():
         if not os.path.exists(file_name):
             print(f"[Building] Not found: {file_name}, skiped")
             continue
         print(f"[Building] Cleaning {year}: {file_name} ...")
         cleaned = clean_estat_building_starts(file_name, year=year)
+        raw_n = len(cleaned)
+        cleaned = to_leaf_level(cleaned)
+        print(f" {raw_n} raw > {len(cleaned)} leafs")
+        building_list.append(cleaned)
 
+    population_list = []
     for year, file_name in population_files.items():
         if not os.path.exists(file_name):
             print(f"[Population] Not found: {file_name}, skiped")
             continue
         print(f"[Population] Cleaning {year}: {file_name} ...")
         cleaned = clean_estat_population(file_name, year=year)
+        population_list.append(cleaned)
