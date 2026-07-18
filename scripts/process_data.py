@@ -1,5 +1,6 @@
 import os
 import re
+from itertools import product
 
 import pandas as pd
 
@@ -43,6 +44,35 @@ def to_leaf_level(df):
     is_aggregate_name = df["city_name"].str.endswith(_AGGREGATE_SUFFIXES, na=False)
     keep_mask = ~(is_seirei_total | is_aggregate_name)
     return df[keep_mask].reset_index(drop=True)
+
+def balance_panel(df, fill_value=0):
+    years = sorted(df["year"].unique())
+    all_codes = sorted(df["city_code"].unique())
+
+    # 'code' map to 'name'
+    name_map = (
+        df.sort_values("year")
+        .drop_duplicates("city_code", keep="first")
+        .set_index("city_code")["city_name"]
+        .to_dict()
+    )
+
+    # Grid(year, city_code) left join original
+    grid = pd.DataFrame(product(years, all_codes), columns=["year", "city_code"])
+    balanced = grid.merge(df, on=["year", "city_code"], how="left")
+
+    # Fill city_name
+    balanced["city_name"] = balanced["city_name"].fillna(
+        balanced["city_code"].map(name_map)
+    )
+
+    # Fill zero
+    id_cols = {"year", "city_code", "city_name"}
+    numeric_cols = [c for c in df.columns if c not in id_cols]
+    for col in numeric_cols:
+        balanced[col] = balanced[col].fillna(fill_value)
+
+    return balanced.sort_values(["year", "city_code"]).reset_index(drop=True)
 
 def clean_estat_building_starts(file_path, year):
     df_raw = pd.read_excel(file_path, header=None, engine="xlrd")
@@ -137,8 +167,19 @@ if __name__ == "__main__":
         cleaned = clean_estat_building_starts(file_name, year=year)
         raw_n = len(cleaned)
         cleaned = to_leaf_level(cleaned)
-        print(f" {raw_n} raw > {len(cleaned)} leafs")
+        print(f" {raw_n} raw > {len(cleaned)} leaves")
         building_list.append(cleaned)
+
+    building_panel = pd.concat(building_list, ignore_index=True)
+    unbalanced_n = len(building_panel)
+    building_panel = balance_panel(building_panel)
+    n_b_cities = building_panel["city_code"].nunique()
+    n_years = building_panel["year"].nunique()
+
+    print(
+        f"[Building] balance_panel: {unbalanced_n} > {len(building_panel)} rows"
+        f"({n_b_cities} cities * {n_years} years)"
+    )
 
     population_list = []
     for year, file_name in population_files.items():
