@@ -152,6 +152,22 @@ def clean_estat_population(file_path, year):
     out.insert(0, "year", year)
     return out
 
+def merge_building_population(building_df, pop_df, ):
+   # prevent issue for same name
+    pop_cols = {
+        c: (f"pop_{c}" if c not in ("year", "city_code", "city_name") else c)
+        for c in pop_df.columns
+    }
+    pop_renamed = pop_df.rename(columns=pop_cols)
+
+    merged = building_df.merge(pop_renamed, on=["year", "city_code"], how="inner")
+    # using city_name from building stat(balanced)
+    if "city_name_y" in merged.columns:
+        merged = merged.drop(columns=["city_name_y"])
+        merged = merged.rename(columns={"city_name_x": "city_name"})
+
+    return merged.sort_values(["year", "city_code"]).reset_index(drop=True)
+
 if __name__ == "__main__":
     building_files = {
         2021: "data/raw/building-starts/2021.xls",
@@ -210,3 +226,23 @@ if __name__ == "__main__":
         f"({n_p_cities} cities * {population_panel['year'].nunique()} years)"
     )
 
+    merged = merge_building_population(building_panel, population_panel)
+    merged = merged.sort_values(["year", "city_code"]).reset_index(drop=True)
+
+    only_building = set(building_panel["city_code"]) - set(population_panel["city_code"])
+    only_pop = set(population_panel["city_code"]) - set(building_panel["city_code"])
+    print(f"\n[Merge] after inner join: {len(merged)} rows × {merged.shape[1]} columns")
+
+    # Urban mergers and disputed territories
+    print(f" only exist in building: {len(only_building)} "
+          f"({sorted(only_building)[:6]}{'...' if len(only_building) > 6 else ''})")
+    print(f" only exist in population: {len(only_pop)} "
+          f"({sorted(only_pop)[:6]}{'...' if len(only_pop) > 6 else ''})")
+ 
+    merged.to_csv(
+        "data/cleaned_panel_2021_2025.csv",
+        index=False,
+        encoding="utf-8-sig"
+    )
+    print("\nSaved")
+ 
