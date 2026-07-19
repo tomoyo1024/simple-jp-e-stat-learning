@@ -10,6 +10,9 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(patchwork)
+
+theme_set(theme_minimal())
 ```
 
 ```{r}
@@ -61,4 +64,29 @@ colnames(df)[4:ncol_bldg] <- c(
   "other_type_area"
 )
 glimpse(df)
+```
+
+## Predictor: Population Growth Rate
+
+The target predictor variable for supervised learning is `pop_growth_rate` that is included population stat.
+
+### Distributions and Long Tail
+
+Overall, there is negative growth (median of approximately −1.2%, due to a low birth rate and aging population). However, there are long tails on both sides: the maximum value is +22.3%, which, when used as Y, results in high variance.
+
+```{r}
+summary(df %>% select(starts_with("pop_")))
+
+p_full <- ggplot(df, aes(pop_growth_rate)) +
+  geom_histogram(bins = 80, fill = "steelblue", color = "white") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  labs(x = "Population Growth Rate (%)", y = "Observations (cities * years)", title = "All: Long Tail (20%)")
+
+p_zoom <- ggplot(df, aes(pop_growth_rate)) +
+  geom_histogram(bins = 60, fill = "steelblue", color = "white") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  coord_cartesian(xlim = c(-5, 5)) +
+  labs(x = "Population Growth Rate (%)", y = "Observations (cities * years)", title = "Main: 5%")
+
+p_full / p_zoom
 ```
