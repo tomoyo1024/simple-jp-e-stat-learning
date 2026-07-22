@@ -11,3 +11,56 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 ```
+
+## Data Preparation
+
+```{r}
+
+df <- read_csv(
+  "data/cleaned_panel_2021_2025.csv",
+  col_types = cols(city_code = col_character(), .default = col_guess()),
+  show_col_types = FALSE
+)
+ncol_bldg <- ncol(df) - 6
+colnames(df)[4:ncol_bldg] <- c(
+  "all_type_building_count_total",
+  "all_type_building_area",
+  "living_count",
+  "living_area",
+  "dormitory_count",
+  "dormitory_area",
+  "mixed_use_count",
+  "mixed_use_area",
+  "agri_count",
+  "agri_area",
+  "mining_count",
+  "mining_area",
+  "plant_count",
+  "plant_area",
+  "energy_count",
+  "energy_area",
+  "it_count",
+  "it_area",
+  "logis_count",
+  "logis_area",
+  "retail_count",
+  "retail_area",
+  "finance_count",
+  "finance_area",
+  "real_estate_count",
+  "real_estate_area",
+  "hotel_count",
+  "hotel_area",
+  "education_count",
+  "education_area",
+  "health_count",
+  "health_area",
+  "other_service_count",
+  "other_service_area",
+  "official_count",
+  "official_area",
+  "other_type_count",
+  "other_type_area"
+)
+
+```
