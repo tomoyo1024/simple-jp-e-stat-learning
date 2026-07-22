@@ -1,0 +1,13 @@
+---
+title: "02-modeling"
+author: "YANKAI MA"
+date: "2026-07-22"
+output: 
+  pdf_document: 
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
