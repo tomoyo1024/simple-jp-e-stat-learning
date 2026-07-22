@@ -11,6 +11,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(patchwork)
+library(corrr)
 
 theme_set(theme_minimal())
 ```
@@ -148,4 +149,55 @@ zero_rows <- df %>% filter(all_type_building_area == 0)
 # Each year
 zero_rows %>% count(year)
 zero_rows %>% distinct(city_code, city_name)
+```
+
+## Constructing Scaled Variable
+
+By dividing the area of each subcomponent by the total area, we obtain 18 proportional variables, the sum of which in each row exactly equals 1 (composite data / simplex constraint), for use in modeling.
+
+```{r}
+df_prop <- df %>%
+  filter(all_type_building_area > 0) %>%
+  mutate(
+    across(
+      ends_with("_area") & !all_type_building_area,
+      ~ .x / all_type_building_area,
+      .names = "p_{.col}"
+    )
+  ) %>%
+  rename_with( ~ str_remove(., "_area$"), starts_with("p_"))
+
+# Verify simplex
+df_prop %>%
+  transmute(row_sum = rowSums(across(starts_with("p_")))) %>%
+  summarise(min = min(row_sum), max = max(row_sum))
+```
+
+## Exploration of correlation
+
+### Screening Using Pearson's Correlation (composite data)
+
+```{r}
+# Correlation between proportion of area by industry and change rates
+corr_y <- df_prop %>%
+  select(starts_with("p_"), pop_growth_rate) %>%
+  correlate() %>% # Default use pearson
+  focus(pop_growth_rate) %>%
+  mutate(term = str_remove(term, "^p_")) %>%
+  arrange(pop_growth_rate)
+
+corr_y %>%
+  ggplot(aes(fct_reorder(term, pop_growth_rate), pop_growth_rate)) +
+  geom_col(aes(fill = pop_growth_rate > 0)) +
+  coord_flip() +
+  scale_fill_manual(
+    values = c("steelblue", "firebrick"),
+    labels = c(
+      "Negative correlation (population decline)",
+      "Positive correlation (population growth)"
+    ),
+    name = NULL
+  ) +
+  labs(x = NULL, y = "Pearson's Correlation", title = "Correlation between proportion of area by industry and change rates") +
+  theme(legend.position = "bottom")
 ```
