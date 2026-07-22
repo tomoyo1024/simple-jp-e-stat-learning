@@ -121,3 +121,31 @@ df %>%
   labs(x = "Population Size", y = "|Growth Rate| (%), Log Scale", title = "The variance in change rates for small towns is greater than large")
 
 ```
+
+## Data Validation
+
+### Missing values
+
+The number of municipalities should be consistent each year, and no missing values in the data columns.
+
+```{r}
+# Balance
+df %>% count(year)
+
+# Missing values
+df %>%
+  select(all_type_building_count_total:other_type_area) %>%
+  summarise(across(everything(), ~ sum(is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "col", values_to = "n_na") %>%
+  filter(n_na > 0)
+```
+
+### All-zero rows
+
+```{r}
+zero_rows <- df %>% filter(all_type_building_area == 0)
+
+# Each year
+zero_rows %>% count(year)
+zero_rows %>% distinct(city_code, city_name)
+```
