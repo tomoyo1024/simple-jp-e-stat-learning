@@ -10,6 +10,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(glmnet)   # lasso
 ```
 
 ## Data Preparation
@@ -78,6 +79,10 @@ df_prop <- df %>%
 
 # Proportions of the 17 subcategories (excluding p_living) 
 fine_cols <- setdiff(grep("^p_", names(df_prop), value = TRUE), "p_living")
+# Full samples
+df_full <- df_prop
+# Threshold: pop > 10000
+df_prop <- df_prop %>% filter(pop_population > 10000)
 
 # 70/30 Split train and test set
 set.seed(1)
@@ -85,4 +90,39 @@ idx <- sample(nrow(df_prop), 0.7 * nrow(df_prop))
 df_train <- df_prop[idx, ]
 df_test  <- df_prop[-idx, ]
 
+```
+
+## Explanation for `pop > 10000`
+
+The EDA phase revealed that small villages and towns were outliers and were therefore excluded. The table below directly illustrates the benefits of this approach—after filtering by population threshold, the R2 values for Grouped Lasso (λ.min, fair comparison) tests were calculated for each of the three Y components:
+
+```{r threshold-table}
+df_decomp_full <- df_full %>%
+  mutate(
+    natural_rate = pop_natural_change / pop_population * 100,
+    social_rate  = pop_social_change  / pop_population * 100
+  ) %>%
+  filter(!is.na(natural_rate), !is.na(social_rate))
+
+map_dfr(c(0, 1000, 5000, 10000), function(thr) {
+  d <- df_decomp_full %>% filter(pop_population > thr)
+  set.seed(1)
+  ct <- sample(unique(d$city_code), 0.7 * length(unique(d$city_code)))
+  gtr <- d %>% filter(city_code %in% ct)
+  gte <- d %>% filter(!city_code %in% ct)
+  foldid <- (as.integer(factor(gtr$city_code)) %% 10) + 1
+  map_dfr(c("pop_growth_rate", "natural_rate", "social_rate"), function(yc) {
+    cv  <- cv.glmnet(as.matrix(gtr[, fine_cols]),
+                     gtr[[yc]],
+                     alpha = 1,
+                     foldid = foldid)
+    pred <- as.numeric(predict(cv, as.matrix(gte[, fine_cols]), s = "lambda.min"))
+    r <- suppressWarnings(cor(pred, gte[[yc]])^2)
+    tibble(pop_min = thr,
+           Y = yc,
+           R2 = ifelse(is.na(r), 0, r))
+  })
+}) %>%
+  pivot_wider(names_from = Y, values_from = R2) %>%
+  mutate(across(where(is.numeric), ~ round(.x, 3)))
 ```
