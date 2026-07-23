@@ -175,6 +175,8 @@ df_prop %>%
 
 ## Exploration of correlation
 
+Which type of new building is most closely associated with population growth?
+
 ### Screening Using Pearson's Correlation (composite data)
 
 ```{r}
@@ -200,4 +202,32 @@ corr_y %>%
   ) +
   labs(x = NULL, y = "Pearson's Correlation", title = "Correlation between proportion of area by industry and change rates") +
   theme(legend.position = "bottom")
+```
+
+### Identifying Patterns in Scatter Plots
+
+```{r}
+# Select the 4 industries with the highest correlation
+
+top_terms <- corr_y %>%
+  mutate(abs_r = abs(pop_growth_rate)) %>%
+  slice_max(abs_r, n = 4) %>%
+  pull(term)
+
+df_prop %>%
+  select(city_code, all_of(paste0("p_", top_terms)), pop_growth_rate) %>%
+  pivot_longer(
+    starts_with("p_"),
+    names_to = "category", values_to = "share"
+  ) %>%
+  mutate(category = str_remove(category, "^p_")) %>%
+  ggplot(aes(share, pop_growth_rate)) +
+  geom_point(alpha = 0.15, size = 0.6) +
+  geom_smooth(method = "lm", color = "firebrick", se = FALSE) +
+  facet_wrap(~category, scales = "free_x") +
+  labs(
+    x = "Proportion of total area",
+    y = "Change rate (%)",
+    title = "Industries of high correlation vs Change rate of Population"
+  )
 ```
