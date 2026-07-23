@@ -63,4 +63,26 @@ colnames(df)[4:ncol_bldg] <- c(
   "other_type_area"
 )
 
+
+# Percentage of total area accounted for by the 18 subcategories p
+df_prop <- df %>%
+  filter(all_type_building_area > 0) %>%            # Drop all zero rows
+  mutate(
+    across(
+      ends_with("_area") & !all_type_building_area,
+      ~ .x / all_type_building_area,
+      .names = "p_{.col}"
+    )
+  ) %>%
+  rename_with( ~ str_remove(., "_area$"), starts_with("p_"))
+
+# Proportions of the 17 subcategories (excluding p_living) 
+fine_cols <- setdiff(grep("^p_", names(df_prop), value = TRUE), "p_living")
+
+# 70/30 Split train and test set
+set.seed(1)
+idx <- sample(nrow(df_prop), 0.7 * nrow(df_prop))
+df_train <- df_prop[idx, ]
+df_test  <- df_prop[-idx, ]
+
 ```
