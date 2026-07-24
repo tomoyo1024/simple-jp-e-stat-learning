@@ -11,6 +11,9 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(glmnet)   # lasso
+library(broom)    # tidy lm
+
+theme_set(theme_minimal())
 ```
 
 ## Data Preparation
@@ -129,3 +132,60 @@ map_dfr(c(0, 1000, 5000, 10000), function(thr) {
 ```
 
 When pop \> 10,000, the R² values for the three components nearly double: total change from 0.127 to 0.251, natural change from 0.129 to 0.212, and social change from 0.064 to 0.156.
+
+## 4 Broad Categories of Linear Regression
+
+```{r}
+# Group the 18 variables into 4 broad categories based on their industrial significance (excluding “residential” as the reference category,to eliminate complete multicollinearity among the constituent data points)
+df_prop <- df_prop %>% mutate(
+  s_primary      = p_agri,
+  s_secondary    = p_mining + p_plant + p_energy + p_it + p_logis,
+  s_tertiary     = p_retail + p_finance + p_real_estate + p_hotel +
+    p_education + p_health + p_other_service,
+  s_public_other = p_official + p_other_type
+)
+
+df_train <- df_prop[idx, ]
+df_test  <- df_prop[-idx, ]
+```
+
+```{r}
+fitA <- lm(pop_growth_rate ~ s_primary + s_secondary + s_tertiary + s_public_other,
+           data = df_train)
+tidy(fitA) %>% mutate(across(where(is.numeric), ~ round(.x, 4)))
+summary(fitA)$r.squared
+```
+
+## Explanation of Coefficients (Relative to the Residential Benchmark)
+
+Since the sum of the four broad categories plus “residential” is always 1, once “residential” is excluded, each coefficient represents “the difference in the associated population growth rate when the share of construction shifts from residential to that industry” (correlation, not causation). In the main sample, all four coefficients are significantly negative:
+
+- `s_primary` (Agriculture, Forestry, and Fisheries) −4.09, highest absolute value — High proportion of agricultural development, accompanied by lower population growth (characteristic of depopulation in rural areas)
+- `s_public_other` (Public Affairs/Unclassified) −3.14 —— High proportion of development focused on remote administrative centers, accompanied by population decline
+- `s_tertiary` (business services) −0.84, `s_secondary` (mining, energy, and transportation) −0.59 — also negative but weaker
+
+The overall trend is very clear: the higher the share of residential construction, the higher the population growth rate; any industry that takes market share away from residential construction is associated with lower population growth. Compared to the full sample (where the coefficient is diluted by noise), the signal is stronger and purer in the main sample.
+
+## Goodness of Fit and Diagnostics
+
+```{r}
+glance(fitA)[c("r.squared", "adj.r.squared")]
+
+# Predicted values vs Residuals
+augment(fitA) %>%
+  ggplot(aes(.fitted, .resid)) +
+  geom_point(alpha = 0.15, size = 0.6) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(x = "Predicted Values", y = "Residuals", title = "Residual plot (pop > 10,000)")
+```
+
+Building structures explain approximately 13.5% of the variance in population growth across actual municipalities.
+
+### Test set
+
+```{r}
+pred_A <- predict(fitA, df_test)
+r2_A   <- cor(pred_A, df_test$pop_growth_rate)^2
+rmse_A <- sqrt(mean((pred_A - df_test$pop_growth_rate)^2))
+c(R2 = r2_A, RMSE = rmse_A)
+```
