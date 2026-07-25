@@ -195,7 +195,6 @@ c(R2 = r2_A, RMSE = rmse_A)
 glmnet uses default normalization and L1 regularization for variable selection.
 
 ```{r}
-
 X_train <- as.matrix(df_train[, fine_cols])
 y_train <- df_train$pop_growth_rate
 X_test  <- as.matrix(df_test[, fine_cols])
@@ -230,3 +229,12 @@ r2_B_1se <- cor(pred_B_1se, y_test)^2
 r2_B_min <- cor(pred_B_min, y_test)^2
 c(R2_lambda1se = r2_B_1se, R2_lambda_min = r2_B_min)
 ```
+
+## Analysis
+
+Under the main sample, `lambda.1se` selected 13 industries, which naturally fell into two groups, fully aligning with the broad categories of Approach A:
+
+- Positive correlation (population growth): `real_estate` (+4.29), `mixed_use` (+2.52), `logis` (+0.60) — real estate/mixed-use residential and commercial/logistics, corresponding to development corridors and population inflows
+- Negative correlation (population outflow): `mining` (−3.88), `agri` (−2.99), `other_type` (−2.30), `official` (−1.77), etc. — dominated by mining, agriculture, and public services, corresponding to contraction in rural and remote areas
+
+This indicates that the integration of domain knowledge (manual PCA) identified the correct direction, but the algorithm further distinguished, at the subcategory level, the few industries that truly drive the trend—particularly the strong positive signal from real estate and mixed-use residential and commercial development.
