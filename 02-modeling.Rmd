@@ -133,7 +133,7 @@ map_dfr(c(0, 1000, 5000, 10000), function(thr) {
 
 When pop \> 10,000, the R² values for the three components nearly double: total change from 0.127 to 0.251, natural change from 0.129 to 0.212, and social change from 0.064 to 0.156.
 
-## 4 Broad Categories of Linear Regression
+## Approach A: 4 Broad Categories of Linear Regression
 
 ```{r}
 # Group the 18 variables into 4 broad categories based on their industrial significance (excluding “residential” as the reference category,to eliminate complete multicollinearity among the constituent data points)
@@ -156,7 +156,7 @@ tidy(fitA) %>% mutate(across(where(is.numeric), ~ round(.x, 4)))
 summary(fitA)$r.squared
 ```
 
-## Explanation of Coefficients (Relative to the Residential Benchmark)
+### Explanation of Coefficients (Relative to the Residential Benchmark)
 
 Since the sum of the four broad categories plus “residential” is always 1, once “residential” is excluded, each coefficient represents “the difference in the associated population growth rate when the share of construction shifts from residential to that industry” (correlation, not causation). In the main sample, all four coefficients are significantly negative:
 
@@ -166,7 +166,7 @@ Since the sum of the four broad categories plus “residential” is always 1, o
 
 The overall trend is very clear: the higher the share of residential construction, the higher the population growth rate; any industry that takes market share away from residential construction is associated with lower population growth. Compared to the full sample (where the coefficient is diluted by noise), the signal is stronger and purer in the main sample.
 
-## Goodness of Fit and Diagnostics
+### Goodness of Fit and Diagnostics
 
 ```{r}
 glance(fitA)[c("r.squared", "adj.r.squared")]
@@ -188,4 +188,45 @@ pred_A <- predict(fitA, df_test)
 r2_A   <- cor(pred_A, df_test$pop_growth_rate)^2
 rmse_A <- sqrt(mean((pred_A - df_test$pop_growth_rate)^2))
 c(R2 = r2_A, RMSE = rmse_A)
+```
+
+## Approach B: Fine-Grained Lasso
+
+glmnet uses default normalization and L1 regularization for variable selection.
+
+```{r}
+
+X_train <- as.matrix(df_train[, fine_cols])
+y_train <- df_train$pop_growth_rate
+X_test  <- as.matrix(df_test[, fine_cols])
+y_test  <- df_test$pop_growth_rate
+
+set.seed(1)
+cvfit <- cv.glmnet(X_train, y_train, alpha = 1)  # alpha=1 > lasso
+
+cvfit$lambda.min
+cvfit$lambda.1se
+
+plot(cvfit)  # MSE vs log(lambda)
+```
+
+### Industries Selected by the Sparse Model (lambda.1se)
+
+```{r}
+b_1se <- coef(cvfit, s = "lambda.1se")
+selected <- data.frame(
+  variable = rownames(b_1se),
+  coef     = as.numeric(b_1se)
+) %>%
+  filter(variable != "(Intercept)", coef != 0) %>%
+  arrange(coef) %>%
+  mutate(coef = round(coef, 3))
+selected
+
+# Test set
+pred_B_1se <- as.numeric(predict(cvfit, X_test, s = "lambda.1se"))
+pred_B_min <- as.numeric(predict(cvfit, X_test, s = "lambda.min"))
+r2_B_1se <- cor(pred_B_1se, y_test)^2
+r2_B_min <- cor(pred_B_min, y_test)^2
+c(R2_lambda1se = r2_B_1se, R2_lambda_min = r2_B_min)
 ```
