@@ -238,3 +238,61 @@ Under the main sample, `lambda.1se` selected 13 industries, which naturally fell
 - Negative correlation (population outflow): `mining` (−3.88), `agri` (−2.99), `other_type` (−2.30), `official` (−1.77), etc. — dominated by mining, agriculture, and public services, corresponding to contraction in rural and remote areas
 
 This indicates that the integration of domain knowledge (manual PCA) identified the correct direction, but the algorithm further distinguished, at the subcategory level, the few industries that truly drive the trend—particularly the strong positive signal from real estate and mixed-use residential and commercial development.
+
+## Assessment of Credibility Tests: Grouped Cross-Validation
+
+Data spanning five years for the same municipality can be used simultaneously for both training and testing. The model only needs to "remember" the fixed characteristics of a given municipality to "predict" its values for other years.
+
+Truly meaningful generalization problem is "whether it can predict values for municipalities it has never seen before" which requires grouping by `city_code`.
+
+### Group CV
+
+```{r}
+# Group by city_code
+set.seed(1)
+cities   <- unique(df_prop$city_code)
+ct_train <- sample(cities, 0.7 * length(cities))
+gtr <- df_prop %>% filter(city_code %in% ct_train)
+gte <- df_prop %>% filter(!city_code %in% ct_train)
+c(
+  n_city_train = length(ct_train),
+  n_city_test  = length(cities) - length(ct_train),
+  n_row_train  = nrow(gtr),
+  n_row_test = nrow(gte)
+)
+
+# Approach A
+fitA_g  <- lm(pop_growth_rate ~ s_primary + s_secondary + s_tertiary + s_public_other,
+              data = gtr)
+r2_A_grp <- cor(predict(fitA_g, gte), gte$pop_growth_rate)^2
+
+# Approach B
+
+foldid_g <- (as.integer(factor(gtr$city_code)) %% 10) + 1
+cvfit_g  <- cv.glmnet(as.matrix(gtr[, fine_cols]),
+                      gtr$pop_growth_rate,
+                      alpha = 1,
+                      foldid = foldid_g)
+pred_B_g <- as.numeric(predict(cvfit_g, as.matrix(gte[, fine_cols]), s = "lambda.1se"))
+r2_B_grp <- cor(pred_B_g, gte$pop_growth_rate)^2
+
+# Group selected by lasso
+b_g <- coef(cvfit_g, s = "lambda.1se")
+data.frame(variable = rownames(b_g), coef = as.numeric(b_g)) %>%
+  filter(variable != "(Intercept)", coef != 0) %>%
+  arrange(coef) %>% mutate(coef = round(coef, 3))
+
+# Comparison
+tibble(
+  model = c("Approach A (Broad Categories)", "Approach B (lasso λ.1se)"),
+  random_R2 = round(c(r2_A, r2_B_1se), 4),
+  group_R2 = round(c(r2_A_grp, r2_B_grp), 4)
+)
+```
+
+- Approach A：Random 0.104 \< Grouped 0.134 (Grouped is higher)
+- Approach B：Random 0.173 \< Grouped 0.211 (Grouped is higher)
+
+Contrary to expectations, the group-based R2 actually exceeded that of the random assignment, indicating that this portion of the signal represents genuine cross-municipality patterns rather than a memory of cross-year patterns within the same municipality.
+
+Grouped lasso (λ=1se) selected 11 industries, showing a high degree of overlap with the 13 industries selected by random sampling `real_estate` (+3.36) and `mixed_use` (+2.98) remain the strongest positive performers, while `mining` (−3.45) and `agri` (−2.70) remain the strongest negative performers. Therefore, the conclusions are robust.
