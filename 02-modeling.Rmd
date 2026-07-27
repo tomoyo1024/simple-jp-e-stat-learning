@@ -296,3 +296,45 @@ tibble(
 Contrary to expectations, the group-based R2 actually exceeded that of the random assignment, indicating that this portion of the signal represents genuine cross-municipality patterns rather than a memory of cross-year patterns within the same municipality.
 
 Grouped lasso (λ=1se) selected 11 industries, showing a high degree of overlap with the 13 industries selected by random sampling `real_estate` (+3.36) and `mixed_use` (+2.98) remain the strongest positive performers, while `mining` (−3.45) and `agri` (−2.70) remain the strongest negative performers. Therefore, the conclusions are robust.
+
+## Robustness Test for Time Lag
+
+Population inflows drive new residential and logistics construction in the current year (reverse causality from Y to X), which exaggerates the correlation coefficient. To test whether the signal meets the temporal requirement that “X precedes Y,” replace Y with the population growth rate for the following year: use the building stock in year t to predict growth in year $t+1$.
+
+```{r}
+# Construct the population growth rate for year t+1, aligned by (city_code, year) back to year t
+y_future <- df_prop %>%
+  select(city_code, year, pop_growth_rate_future = pop_growth_rate) %>%
+  mutate(year = year - 1)   # map to previous t+1
+
+df_lag <- df_prop %>%
+  left_join(y_future, by = c("city_code", "year")) %>%
+  filter(!is.na(pop_growth_rate_future))
+
+df_lag_train <- df_lag %>% filter(city_code %in% ct_train)
+df_lag_test  <- df_lag %>% filter(!city_code %in% ct_train)
+foldid_lag   <- (as.integer(factor(df_lag_train$city_code)) %% 10) + 1
+
+cvfit_lag <- cv.glmnet(
+  as.matrix(df_lag_train[, fine_cols]),
+  df_lag_train$pop_growth_rate_future,
+  alpha = 1,
+  foldid = foldid_lag
+)
+
+b_lag <- coef(cvfit_lag, s = "lambda.1se")
+selected_lag <- data.frame(
+  variable = rownames(b_lag),
+  coef     = as.numeric(b_lag)
+) %>%
+  filter(variable != "(Intercept)", coef != 0) %>%
+  arrange(coef) %>%
+  mutate(coef = round(coef, 3))
+selected_lag
+
+# R2 for the test set, compared with the group-based model
+pred_lag <- as.numeric(predict(cvfit_lag,
+  as.matrix(df_lag_test[, fine_cols]), s = "lambda.1se"))
+r2_lag <- cor(pred_lag, df_lag_test$pop_growth_rate_future)^2
+c(Same_Period_R2 = r2_B_grp, Lag_Period_R2 = r2_lag)
+```
