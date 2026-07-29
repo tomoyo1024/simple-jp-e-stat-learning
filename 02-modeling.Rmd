@@ -338,3 +338,96 @@ pred_lag <- as.numeric(predict(cvfit_lag,
 r2_lag <- cor(pred_lag, df_lag_test$pop_growth_rate_future)^2
 c(Same_Period_R2 = r2_B_grp, Lag_Period_R2 = r2_lag)
 ```
+
+## Feature Engineering：Per Capita Construction
+
+The previous model uses only the share of area (`p_*`), which captures industrial structure but ignores the scale of construction. Municipalities with the same industrial structure will clearly exhibit different population dynamics if their total construction volume is three times that of others. We supplement this by using per capita construction intensity:
+
+$$ \log\!\Big(1 + \frac{\text{Total Area of New Building}}{\text{population}}\Big)$$
+
+It is conceptually orthogonal to proportional characteristics—the sum of the proportions is always 1, regardless of the total amount.
+
+```{r}
+add_intensity <- . %>% mutate(
+  total_area_per_cap = all_type_building_area / pop_population,
+  log_area_per_cap   = log1p(total_area_per_cap)   
+)
+df_prop      <- add_intensity(df_prop)
+gtr          <- add_intensity(gtr)
+gte          <- add_intensity(gte)
+df_lag_train <- add_intensity(df_lag_train)
+df_lag_test  <- add_intensity(df_lag_test)
+```
+
+### Feature Evaluation
+
+```{r}
+cor(df_prop$log_area_per_cap, df_prop$pop_population)
+
+cor(df_prop$log_area_per_cap, df_prop$pop_growth_rate)
+
+df_prop %>%
+  select(log_area_per_cap, total_area_per_cap, pop_growth_rate) %>%
+  pivot_longer(-pop_growth_rate, names_to="var", values_to="x") %>%
+  mutate(var = if_else(var=="log_area_per_cap", "Logarithmic Intensity", "Initial Strength(square meters/person)")) %>%
+  ggplot(aes(x, pop_growth_rate)) +
+  geom_point(alpha=0.12, size=0.5) +
+  geom_smooth(method="lm", se=FALSE, color="firebrick") +
+  facet_wrap(~var, scales="free_x") +
+  labs(x=NULL, y="Population Growth (%)",
+       title="Per Capita Construction vs Population Growth (Initial vs Logarithmic)")
+```
+
+1.  Logarithmic intensity shows almost no correlation with population size (r ≈ 0.08)
+2.  Logarithmic intensity is correlated with the population growth or decline rate: r = 0.41
+
+### Feature Performance
+
+```{r intensity-model}
+# Approach A
+fitA_int <- lm(pop_growth_rate ~ s_primary + s_secondary + s_tertiary +
+                                 s_public_other + log_area_per_cap, data = gtr)
+r2_A_int <- cor(predict(fitA_int, gte), gte$pop_growth_rate)^2
+
+# Approach B
+cvfit_int <- cv.glmnet(as.matrix(gtr[, c(fine_cols, "log_area_per_cap")]),
+                       gtr$pop_growth_rate, alpha = 1, foldid = foldid_g)
+pred_int <- as.numeric(predict(cvfit_int, as.matrix(gte[, c(fine_cols, "log_area_per_cap")]),
+                               s = "lambda.1se"))
+r2_B_int <- cor(pred_int, gte$pop_growth_rate)^2
+
+tibble(
+  Model = c("Approach A: Only proportion", "Approach A: Plus Capita",
+           "Approach B: Only proportion", "Approach B: Plus Capita"),
+  Group_R2 = round(c(r2_A_grp, r2_A_int, r2_B_grp, r2_B_int), 4)
+)
+
+b_int <- coef(cvfit_int, s = "lambda.1se")
+data.frame(variable = rownames(b_int), coef = as.numeric(b_int)) %>%
+  filter(variable == "log_area_per_cap") %>% mutate(coef = round(coef, 3))
+```
+
+The strength features doubled the R2 values for both sets of models: Approach A went from 0.134 to 0.44, and Approach B went from 0.211 to 0.426.
+
+### Test for Time Lag (Approach B)
+
+```{r}
+# Approach B
+foldid_il <- (as.integer(factor(df_lag_train$city_code)) %% 10) + 1
+
+cvfit_lag_int <- cv.glmnet(
+  as.matrix(df_lag_train[, c(fine_cols, "log_area_per_cap")]),
+  df_lag_train$pop_growth_rate_future, alpha = 1, foldid = foldid_il
+)
+pred_lag_int <- as.numeric(predict(cvfit_lag_int,
+  as.matrix(df_lag_test[, c(fine_cols, "log_area_per_cap")]), s = "lambda.1se"))
+r2_lag_int <- cor(pred_lag_int, df_lag_test$pop_growth_rate_future)^2
+
+tibble(
+  Model = c("Same Period (X_t, Y_t)", "Lag (X_t, Y_t+1)"),
+  `Only proportion` = round(c(r2_B_grp, r2_lag), 4),
+  `Plus Capita` = round(c(r2_B_int, r2_lag_int), 4)
+)
+```
+
+The lagged R2 (0.436) not only did not decrease but was actually slightly higher than the R2 (0.426) for the same period.
