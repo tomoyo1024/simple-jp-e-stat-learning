@@ -8,7 +8,14 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.path = "figures/",
+  dev = "png",
+  dpi = 300,
+  fig.width = 6,
+  fig.height = 5
+)
 library(tidyverse)
 library(patchwork)
 library(corrr)
@@ -75,7 +82,7 @@ The target predictor variable for supervised learning is `pop_growth_rate` that 
 
 Overall, there is negative growth (median of approximately −1.2%, due to a low birth rate and aging population). However, there are long tails on both sides: the maximum value is +22.3%, which, when used as Y, results in high variance.
 
-```{r}
+```{r y-dist, fig.height=7}
 summary(df %>% select(starts_with("pop_")))
 
 p_full <- ggplot(df, aes(pop_growth_rate)) +
@@ -104,7 +111,7 @@ p_full / p_zoom
 
 As a matter of common sense, the smaller the population, the more volatile the growth rate tends to be, meaning that even a small number of people moving in or out can cause significant fluctuations. Validate the results using box plots based on population size.
 
-```{r}
+```{r y-by-pop}
 df %>%
   filter(pop_population > 0) %>%
   mutate(pop_bin = cut(
@@ -179,7 +186,7 @@ Which type of new building is most closely associated with population growth?
 
 ### Screening Using Pearson's Correlation (composite data)
 
-```{r}
+```{r corr-bar, fig.height=6}
 # Correlation between proportion of area by industry and change rates
 corr_y <- df_prop %>%
   select(starts_with("p_"), pop_growth_rate) %>%
@@ -206,7 +213,7 @@ corr_y %>%
 
 ### Identifying Patterns in Scatter Plots
 
-```{r}
+```{r top-scatter, fig.width=7, fig.height=6}
 # Select the 4 industries with the highest correlation
 
 top_terms <- corr_y %>%

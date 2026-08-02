@@ -8,7 +8,12 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.path = "figures/",
+  dev = "png",
+  dpi = 300
+)
 library(tidyverse)
 library(glmnet)   # lasso
 library(broom)    # tidy lm
@@ -168,7 +173,7 @@ The overall trend is very clear: the higher the share of residential constructio
 
 ### Goodness of Fit and Diagnostics
 
-```{r}
+```{r resid-A}
 glance(fitA)[c("r.squared", "adj.r.squared")]
 
 # Predicted values vs Residuals
@@ -194,7 +199,7 @@ c(R2 = r2_A, RMSE = rmse_A)
 
 glmnet uses default normalization and L1 regularization for variable selection.
 
-```{r}
+```{r cv-lasso}
 X_train <- as.matrix(df_train[, fine_cols])
 y_train <- df_train$pop_growth_rate
 X_test  <- as.matrix(df_test[, fine_cols])
@@ -206,7 +211,9 @@ cvfit <- cv.glmnet(X_train, y_train, alpha = 1)  # alpha=1 > lasso
 cvfit$lambda.min
 cvfit$lambda.1se
 
+op <- par(mar = c(4, 4, 2, 1))  # smaller margins so it fits small panes
 plot(cvfit)  # MSE vs log(lambda)
+par(op)
 ```
 
 ### Industries Selected by the Sparse Model (lambda.1se)
@@ -361,7 +368,7 @@ df_lag_test  <- add_intensity(df_lag_test)
 
 ### Feature Evaluation
 
-```{r}
+```{r intensity-scatter}
 cor(df_prop$log_area_per_cap, df_prop$pop_population)
 
 cor(df_prop$log_area_per_cap, df_prop$pop_growth_rate)
