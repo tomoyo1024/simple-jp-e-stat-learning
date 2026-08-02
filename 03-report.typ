@@ -14,6 +14,13 @@
       location: [],
       email: "",
     ),
+    (
+      name: "KUN HE",
+      department: [],
+      organization: [],
+      location: [],
+      email: "",
+    ),
   ),
   index-terms: (
     "Population change prediction",
@@ -46,7 +53,23 @@ Government-designated cities are subdivided into “wards,” and ward-level dat
 = Data Analysis
 
 
-The distribution of the dependent variable `pop_growth_rate` (population growth rate) generally shows negative growth, with a median of approximately $-1.2%$, but it has long tails on both sides, with a maximum value exceeding $+20%$ and a minimum value below $-18%$. Box plots grouped by population size confirm this: the smaller the population of a town or village, the greater the variance in the growth rate (even a small number of people moving in or out causes significant fluctuations), which means that the Y-values for small towns and villages are subject to extremely high noise.
+The distribution of the dependent variable `pop_growth_rate` (population growth rate) generally shows negative growth, with a median of approximately $-1.2%$, but it has long tails on both sides, with a maximum value exceeding $+20%$ and a minimum value below $-18%$.
+
+#figure(
+  image("figures/y-dist-1.png"),
+  caption: [Distribution of population growth rate. Left: full range showing long tails extending to $plus.minus 20%$; right:main body distribution clipped to $plus.minus 5%$.
+  ],
+)
+
+
+#figure(
+  image("figures/y-by-pop-1.png"),
+  caption: [Absolute growth rate by population size bin (log scale). Smaller municipalities exhibit far greater variance, motivating the population $> 10,000$ sample restriction.
+  ],
+)
+
+
+Box plots grouped by population size confirm this: the smaller the population of a town or village, the greater the variance in the growth rate (even a small number of people moving in or out causes significant fluctuations), which means that the Y-values for small towns and villages are subject to extremely high noise.
 
 Sample selection is a critical decision in this analysis. The full dataset consists of 9,349 rows (1896 municipalities); after restricting the sample to those with a population $> 10,000$, 6,819 rows (1378 municipalities) remain, representing approximately 73% of the original dataset. The table below directly illustrates the benefits of this restriction—it shows the $R^2$ values from tests using grouped Lasso ($lambda_("min")$) on the three Y components for different population thresholds.
 
@@ -67,6 +90,19 @@ Sample selection is a critical decision in this analysis. The full dataset consi
 
 For feature extraction, 18 ratio variables `p_*` were constructed from 38 columns of floor area metrics; each variable represents the ratio of the area of a specific land use category to the total area, and the sum of the 18 ratios exactly equals 1 (due to the component data and simplex constraints). We then performed a preliminary screening using Pearson’s correlation coefficient between each `p_*` and Y to identify the building use types most strongly associated with population growth or decline.
 
+#figure(
+  image("figures/corr-bar-1.png"),
+  caption: [Pearson correlation between each building-use proportion and population growth rate. Real estate and mixed-use show positive association; agriculture and mining show the strongest negative association.
+  ],
+)
+
+
+#figure(
+  image("figures/top-scatter-1.png"),
+  caption: [Scatter plots of the four most correlated industries against population growth rate, with linear smooth lines. Relationships are approximately linear but contain high-leverage points.
+  ],
+)
+
 = Model Training
 
 In the feature engineering phase of this study, a coarse-clustering strategy (“artificial principal component analysis”) was employed to group the 18 subcategories (A–R) into 5 broad categories based on their industrial significance; the residential category was discarded as the reference to eliminate complete multicollinearity in the component data.
@@ -81,7 +117,9 @@ In the feature engineering phase of this study, a coarse-clustering strategy (�
     [Residential (reference, dropped)], [A\ B\ C], [Detached, semi-residential, mixed residential-commercial],
     [Primary], [D], [Agriculture, forestry, fisheries],
     [Secondary], [E\ F\ G\ H\ I], [Mining, manufacturing, energy, telecom, transport],
-    [Tertiary / Services], [J\ K\ L\ M\ N\ O\ P], [Retail, finance, real estate, accommodation, education, healthcare, other services],
+    [Tertiary / Services],
+    [J\ K\ L\ M\ N\ O\ P],
+    [Retail, finance, real estate, accommodation, education, healthcare, other services],
     [Public / Other], [Q\ R], [Government, unclassified],
     table.hline(stroke: 0.5pt),
   ),
@@ -90,9 +128,27 @@ In the feature engineering phase of this study, a coarse-clustering strategy (�
 
 Approach A uses OLS regression with four broad categories. The coefficients are: `s_primary` $-4.09$ (largest absolute value, agriculture, forestry, and fisheries), `s_public_other` $-3.14$ (public services/unclassified), `s_tertiary` $-0.84$ (business services), and `s_secondary` $-0.59$ (mining, energy, and transportation). All four coefficients are significantly negative, and the implication is clear: a higher share of residential construction is associated with a higher population growth rate; any industry that takes market share away from residential construction is associated with lower population growth.
 
+#figure(
+  image("figures/resid-A-1.png"),
+  caption: [Residuals vs fitted values for Approach A (pop $> 10,000$). No obvious nonlinear pattern; residuals are roughly symmetric around zero but show heavier tails at the extremes.
+  ],
+)
+
 Approach B uses Lasso regression with 17 subcategories (excluding `p_living`). The $lambda_("1se")$ model identifies 13 industries: on the positive side, `real_estate` ($+4.29$), `mixed_use` ($+2.52$), and `logis` ($+0.60$); negative effects include `mining` ($-3.88$), `agri` ($-2.99$), `other_type` ($-2.30$), and `official` ($-1.77$).
 
+#figure(
+  image("figures/cv-lasso-1.png"),
+  caption: [Lasso cross-validation curve (MSE vs $log lambda$). The two vertical dashes mark $lambda_("min")$ and $lambda_("1se")$; the sparser $lambda_("1se")$ model was selected for interpretability.
+  ],
+)
+
 In addition, the per capita building density feature was introduced as a scale dimension, calculated using the formula $log(1 + "total_building_area" / "population")$. This feature shows almost no correlation with population size ($r approx 0.08$), but is correlated with the growth rate ($r = 0.41$; $R^2 approx 0.17$). The explanatory power of this single feature alone exceeds half the combined explanatory power of the 17 ratio features. The evaluation metric uniformly uses the test set $R^2$.
+
+#figure(
+  image("figures/intensity-scatter-1.png"),
+  caption: [Per capita construction intensity vs population growth rate. Left: raw intensity ($m^2$/person); right: log-transformed intensity. The log transform stabilizes variance and yields a clearer linear trend ($r = 0.41$).
+  ],
+)
 
 = Model Validation
 
@@ -117,7 +173,7 @@ The panel data poses a risk of data leakage: rows spanning multiple years for th
 The key finding is that the group-based $R^2$ is actually *higher* than the random $R^2$, indicating that the model captures genuine cross-municipality patterns rather than a memory of cross-year patterns within the same city.
 
 
-The time lag test is used to address reverse causality (i.e., population inflows driving construction in the same year, thereby exaggerating the correlation during that period). Using the $X_t -> Y_{t+1}$ setup, the lagged dataset consists of 5,441 rows (base years 2021–2024). The $R^2$ for the concurrent period is $0.211$, while the $R^2$ for the lagged period is $0.192$—a decrease of only about 9%—and the selected variables show a high degree of overlap.
+The time lag test is used to address reverse causality (i.e., population inflows driving construction in the same year, thereby exaggerating the correlation during that period). Using the $X_t -> Y_(t+1)$ setup, the lagged dataset consists of 5,441 rows (base years 2021–2024). The $R^2$ for the concurrent period is $0.211$, while the $R^2$ for the lagged period is $0.192$—a decrease of only about 9%—and the selected variables show a high degree of overlap.
 
 = Model Performance
 
